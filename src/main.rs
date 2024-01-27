@@ -57,14 +57,16 @@ async fn alert_handler(
 }
 
 async fn watchdog_handler(data: web::Data<AppState>, req: HttpRequest, config: web::Data<Config>) -> HttpResponse {
-    if !is_authorized(&req, &config.api_key_watchdog) {
-        return HttpResponse::Unauthorized().finish();
+    if is_authorized(&req, &config.api_key_watchdog) {
+        let mut last_alert = data.last_alert_time.lock().unwrap();
+        let current_time = Local::now();
+        *last_alert = Instant::now();
+        println!("Watchdog heartbeat received at {}", current_time.format("%Y-%m-%d %H:%M:%S"));
+        HttpResponse::Ok().body("Heartbeat received!")
+    } else {
+        println!("Authorization failed");
+        HttpResponse::Unauthorized().body("Heartbeat failed: Unauthorized")
     }
-    let mut last_alert = data.last_alert_time.lock().unwrap();
-    let current_time = Local::now();
-    *last_alert = Instant::now();
-    println!("Watchdog heartbeat received at {}", current_time.format("%Y-%m-%d %H:%M:%S"));
-    HttpResponse::Ok().body("Heartbeat received!")
 }
 
 async fn send_notification(config: &Config, message: &str) -> Result<(), Box<dyn std::error::Error>> {
