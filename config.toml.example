@@ -1,0 +1,9 @@
+# config.toml
+server_port = "7000"
+pushover_token = "app_token"
+pushover_user = "user_token"
+pushover_message = "Prometheus not firing!"
+pushover_priority = "1" # 0, 1 supported
+pushover_sound = "siren"
+alert_check_interval_secs = 600
+api_key = "" # optional
