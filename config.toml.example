@@ -6,4 +6,5 @@ pushover_message = "Prometheus not firing!"
 pushover_priority = "1" # 0, 1 supported
 pushover_sound = "siren"
 alert_check_interval_secs = 600
-api_key = "" # optional
+api_key_watchdog = "" # optional
+api_key_alert = "" # optional

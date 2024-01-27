@@ -3,7 +3,6 @@ use serde::Deserialize;
 use std::{sync::Mutex, time::Instant, fs, env};
 use tokio::time::{self, Duration};
 use chrono::Local;
-use env_logger;
 
 #[derive(Deserialize, Clone)]
 struct Config {
@@ -13,18 +12,20 @@ struct Config {
     #[serde(default)]
     pushover_message: Option<String>,
     #[serde(default = "default_priority")]
-    pushover_priority: String,
+    pushover_priority: Option<String>,
     #[serde(default)]
     pushover_sound: Option<String>,
     #[serde(default = "default_alert_check_interval_secs")]
     alert_check_interval_secs: u64,
     #[serde(default)]
-    api_key: Option<String>,
+    api_key_watchdog: Option<String>,
+    #[serde(default)]
+    api_key_alert: Option<String>,
 }
 
 // Default functions...
-fn default_priority() -> String {
-    "0".to_string()
+fn default_priority() -> Option<String> {
+    None
 }
 
 fn default_alert_check_interval_secs() -> u64 {
@@ -36,9 +37,32 @@ struct AppState {
     last_alert_time: Mutex<Instant>,
 }
 
+#[derive(Deserialize)]
+struct AlertParams {
+    message: Option<String>,
+}
+
+async fn private_alert_handler(
+    req: HttpRequest,
+    config: web::Data<Config>,
+    params: web::Query<AlertParams>,
+) -> impl Responder {
+    match req.headers().get("x-api-key") {
+        Some(header_value) if config.api_key_alert.as_deref() == Some(header_value.to_str().unwrap_or("")) => {
+            let custom_message = params.message.clone();
+            if let Err(e) = send_notification(&config, custom_message.as_deref()).await {
+                println!("Error sending notification: {}", e);
+                return HttpResponse::InternalServerError().body("Failed to send notification");
+            }
+            HttpResponse::Ok().body("Private alert received and notification sent.")
+        },
+        _ => HttpResponse::Unauthorized().body("Invalid or missing API key."),
+    }
+}
+
 // Handler for Prometheus alerts (both POST and GET)
 async fn alert_handler(data: web::Data<AppState>, req: HttpRequest, config: web::Data<Config>) -> impl Responder {
-    if config.api_key.as_ref().map_or(true, |key| key.is_empty()) {
+    if config.api_key_watchdog.as_ref().map_or(true, |key| key.is_empty()) {
         let mut last_alert = data.last_alert_time.lock().unwrap();
         let current_time = Local::now();
         println!("Heartbeat received at {}", current_time.format("%Y-%m-%d %H:%M:%S"));
@@ -46,7 +70,7 @@ async fn alert_handler(data: web::Data<AppState>, req: HttpRequest, config: web:
         HttpResponse::Ok().body("Alert received.")
     } else {
         match req.headers().get("x-api-key") {
-            Some(header_value) if Some(header_value.to_str().unwrap_or("")) == config.api_key.as_deref() => {
+            Some(header_value) if Some(header_value.to_str().unwrap_or("")) == config.api_key_watchdog.as_deref() => {
                 // Correct API key; proceed with the handler logic
                 let mut last_alert = data.last_alert_time.lock().unwrap();
                 let current_time = Local::now();
@@ -60,20 +84,22 @@ async fn alert_handler(data: web::Data<AppState>, req: HttpRequest, config: web:
 }
 
 // Function to send a notification
-async fn send_notification(config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+async fn send_notification(config: &Config, custom_message: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
     let client = reqwest::Client::new();
+    let message = custom_message.unwrap_or(config.pushover_message.as_deref().unwrap_or("Default message")).to_string();
+
     let mut form = vec![
         ("token", &config.pushover_token),
         ("user", &config.pushover_user),
-        ("priority", &config.pushover_priority),
+        ("message", &message),
     ];
-
-    if let Some(message) = &config.pushover_message {
-        form.push(("message", message));
-    }
 
     if let Some(sound) = &config.pushover_sound {
         form.push(("sound", sound));
+    }
+
+    if let Some(priority) = &config.pushover_priority {
+        form.push(("priority", priority));
     }
 
     let response = client.post("https://api.pushover.net/1/messages.json")
@@ -104,10 +130,6 @@ async fn check_alerts(config: Config, data: web::Data<AppState>) {
         interval.tick().await;
         let elapsed = data.last_alert_time.lock().unwrap().elapsed();
 
-        // Debugging logs
-        println!("Elapsed time: {} seconds", elapsed.as_secs());
-        println!("Warning threshold: {} seconds", warning_threshold.as_secs());
-
         // Log a warning when appropriate
         if elapsed > warning_threshold && elapsed < alert_interval {
             println!("Warning: More than 50% of the alert interval has elapsed without receiving an alert.");
@@ -115,7 +137,7 @@ async fn check_alerts(config: Config, data: web::Data<AppState>) {
 
         // Send notification if the interval has passed
         if elapsed >= alert_interval {
-            if let Err(e) = send_notification(&config).await {
+            if let Err(e) = send_notification(&config, None).await {
                 println!("Error sending notification: {}", e);
             }
         }
@@ -153,8 +175,10 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(app_data.clone()) // Shared state
             .app_data(web::Data::new(config.clone())) // Configuration
-            .route("/alerts", web::post().to(alert_handler))
-            .route("/alerts", web::get().to(alert_handler))
+            .route("/watchdog", web::post().to(alert_handler))
+            .route("/watchdog", web::get().to(alert_handler))
+            .route("/alert", web::post().to(private_alert_handler))
+            .route("/alert", web::get().to(private_alert_handler))
     })
     .bind(format!("0.0.0.0:{}", server_port))?
     .workers(1)
