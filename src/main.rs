@@ -1,6 +1,6 @@
-use actix_web::{web, App, HttpServer, HttpResponse, HttpRequest, Responder, rt};
+use actix_web::{web, App, HttpServer, HttpResponse, HttpRequest}; 
 use serde::Deserialize;
-use std::{sync::Mutex, time::Instant, fs, env};
+use std::{sync::Mutex, time::Instant, env, fs};
 use tokio::time::{self, Duration};
 use chrono::Local;
 
@@ -11,7 +11,7 @@ struct Config {
     pushover_user: String,
     #[serde(default)]
     pushover_message: Option<String>,
-    #[serde(default = "default_priority")]
+    #[serde(default)]
     pushover_priority: Option<String>,
     #[serde(default)]
     pushover_sound: Option<String>,
@@ -23,16 +23,8 @@ struct Config {
     api_key_alert: Option<String>,
 }
 
-// Default functions...
-fn default_priority() -> Option<String> {
-    None
-}
+fn default_alert_check_interval_secs() -> u64 { 600 }
 
-fn default_alert_check_interval_secs() -> u64 {
-    600
-}
-
-// Shared state
 struct AppState {
     last_alert_time: Mutex<Instant>,
 }
@@ -42,109 +34,82 @@ struct AlertParams {
     message: Option<String>,
 }
 
-fn is_authorized(req: &HttpRequest, expected_api_key: Option<&str>) -> bool {
-    match expected_api_key {
-        Some(api_key) if !api_key.is_empty() => {
-            req.headers()
-               .get("Authorization")
-               .and_then(|header_value| header_value.to_str().ok())
-               .map(|token| token == format!("Bearer {}", api_key))
-               .unwrap_or(false)
-        },
-        _ => true, // Bypass authorization check if the API key is not set or empty
-    }
+fn is_authorized(req: &HttpRequest, api_key: &Option<String>) -> bool {
+    api_key.as_ref()
+          .map_or(true, |key| req.headers().get("Authorization")
+                  .and_then(|val| val.to_str().ok())
+                  .map_or(false, |token| token == format!("Bearer {}", key)))
 }
 
 async fn alert_handler(
     req: HttpRequest,
     config: web::Data<Config>,
     params: web::Query<AlertParams>,
-) -> impl Responder {
-    if is_authorized(&req, config.api_key_alert.as_deref()) {
-        // Use the custom message if provided, otherwise use a default message
-        let message_to_send = params.message.as_deref()
-            .unwrap_or("Default private alert message");
-
-        // Send the notification with the determined message
-        if let Err(e) = send_notification(&config, Some(message_to_send)).await {
-            println!("Error sending notification: {}", e);
-            return HttpResponse::InternalServerError().body("Failed to send notification");
-        }
-        HttpResponse::Ok().body("Private alert received and notification sent.")
-    } else {
-        HttpResponse::Unauthorized().body("Invalid or missing Authorization header.")
+) -> HttpResponse {
+    if !is_authorized(&req, &config.api_key_alert) {
+        return HttpResponse::Unauthorized().finish();
+    }
+    let message = params.message.as_deref().or_else(|| config.pushover_message.as_deref()).unwrap_or("Default message");
+    match send_notification(&config, message).await {
+        Ok(_) => HttpResponse::Ok().finish(),
+        Err(_) => HttpResponse::InternalServerError().finish()
     }
 }
 
-async fn watchdog_handler(data: web::Data<AppState>, req: HttpRequest, config: web::Data<Config>) -> impl Responder {
-    if is_authorized(&req, config.api_key_watchdog.as_deref()) {
-        let mut last_alert = data.last_alert_time.lock().unwrap();
-        let current_time = Local::now();
-        println!("Watchdog heartbeat received at {}", current_time.format("%Y-%m-%d %H:%M:%S"));
-        *last_alert = Instant::now();
-        HttpResponse::Ok().body("Watchdog alert received.")
-    } else {
-        HttpResponse::Unauthorized().body("Invalid or missing Authorization header.")
+async fn watchdog_handler(data: web::Data<AppState>, req: HttpRequest, config: web::Data<Config>) -> HttpResponse {
+    if !is_authorized(&req, &config.api_key_watchdog) {
+        return HttpResponse::Unauthorized().finish();
     }
+    let mut last_alert = data.last_alert_time.lock().unwrap();
+    let current_time = Local::now();
+    *last_alert = Instant::now();
+    println!("Watchdog heartbeat received at {}", current_time.format("%Y-%m-%d %H:%M:%S"));
+    HttpResponse::Ok().body("Heartbeat received!")
 }
 
-// Function to send a notification
-async fn send_notification(config: &Config, custom_message: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
+async fn send_notification(config: &Config, message: &str) -> Result<(), Box<dyn std::error::Error>> {
     let client = reqwest::Client::new();
-    let message = custom_message.unwrap_or(config.pushover_message.as_deref().unwrap_or("Default message")).to_string();
+    let message_string = message.to_string(); // Convert message to String
 
-    let mut form = vec![
-        ("token", &config.pushover_token),
-        ("user", &config.pushover_user),
-        ("message", &message),
+    let mut form_data = vec![
+        ("token", config.pushover_token.clone()),
+        ("user", config.pushover_user.clone()),
+        ("message", message_string),
     ];
 
-    if let Some(sound) = &config.pushover_sound {
-        form.push(("sound", sound));
+    if let Some(ref sound) = config.pushover_sound {
+        form_data.push(("sound", sound.clone()));
     }
 
-    if let Some(priority) = &config.pushover_priority {
-        form.push(("priority", priority));
+    if let Some(ref priority) = config.pushover_priority {
+        form_data.push(("priority", priority.clone()));
     }
 
     let response = client.post("https://api.pushover.net/1/messages.json")
-        .form(&form)
-        .send()
-        .await?;
+                         .form(&form_data)
+                         .send()
+                         .await?;
 
-    if response.status().is_success() {
-        println!("Notification sent successfully");
-    } else {
-        println!("Failed to send notification. Status: {}", response.status());
-        if let Ok(text) = response.text().await {
-            println!("Response: {}", text);
-        }
-    }
-
+    response.error_for_status_ref()?;
     Ok(())
 }
 
 async fn check_alerts(config: Config, data: web::Data<AppState>) {
     let alert_interval = Duration::from_secs(config.alert_check_interval_secs);
-    let warning_threshold = alert_interval / 2; // 50% of the total time
-    let mut interval = time::interval(Duration::from_secs(60)); // Check every minute
-
-    println!("Timer set for {} seconds before sending notification.", alert_interval.as_secs());
+    let mut interval = time::interval(Duration::from_secs(60));
 
     loop {
         interval.tick().await;
         let elapsed = data.last_alert_time.lock().unwrap().elapsed();
 
-        // Log a warning when appropriate
-        if elapsed > warning_threshold && elapsed < alert_interval {
-            println!("Warning: More than 50% of the alert interval has elapsed without receiving an alert.");
-        }
-
-        // Send notification if the interval has passed
+        // Send notification if the full interval has passed
         if elapsed >= alert_interval {
-            if let Err(e) = send_notification(&config, None).await {
-                println!("Error sending notification: {}", e);
+            if let Err(e) = send_notification(&config, "Alert interval exceeded").await {
+                eprintln!("Error sending notification: {}", e);
             }
+
+            // Reset the last alert time
+            *data.last_alert_time.lock().unwrap() = Instant::now();
         }
     }
 }
@@ -154,38 +119,35 @@ async fn main() -> std::io::Result<()> {
     env::set_var("RUST_LOG", "debug");
     env_logger::init();
 
-    // Load config
-    let config_path = env::var("CONFIG_PATH").unwrap_or("config.toml".to_string());
+    let config_path = env::var("CONFIG_PATH").unwrap_or_else(|_| "config.toml".to_string());
     let config_contents = fs::read_to_string(&config_path)
         .expect("Failed to read the configuration file.");
     let config: Config = toml::from_str(&config_contents)
         .expect("Failed to parse the configuration file.");
 
-    let server_port = config.server_port.clone();
+    let server_port = config.server_port.clone(); // Clone the server port here
+
     let app_data = web::Data::new(AppState {
         last_alert_time: Mutex::new(Instant::now()),
     });
 
-    // Clone the config and app_data for the check_alerts task
-    let config_for_task = config.clone();
-    let app_data_for_task = app_data.clone();
-
     // Spawn the check_alerts task
-    rt::spawn(async move {
-        check_alerts(config_for_task, app_data_for_task).await;
+    let config_for_alerts = config.clone();
+    let app_data_for_alerts = app_data.clone();
+    tokio::spawn(async move {
+        check_alerts(config_for_alerts, app_data_for_alerts).await;
     });
 
-    // Start the web server
     HttpServer::new(move || {
         App::new()
             .app_data(app_data.clone()) // Shared state
-            .app_data(web::Data::new(config.clone())) // Configuration
+            .app_data(web::Data::new(config.clone())) // Clone the config inside the closure
             .route("/watchdog", web::post().to(watchdog_handler))
             .route("/alert", web::post().to(alert_handler))
-            .route("/alert", web::get().to(alert_handler))
     })
     .bind(format!("0.0.0.0:{}", server_port))?
     .workers(1)
     .run()
     .await
 }
+
