@@ -2,11 +2,6 @@ global:
   # Global configurations
 
 route:
-  group_by: ['alertname']
-  group_wait: 30s
-  group_interval: 5m
-  repeat_interval: 15m
-
   receiver: 'dummy'  # Default receiver for unhandled alerts
   routes:
     - match:

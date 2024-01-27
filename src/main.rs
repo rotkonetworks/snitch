@@ -61,8 +61,12 @@ async fn alert_handler(
     params: web::Query<AlertParams>,
 ) -> impl Responder {
     if is_authorized(&req, config.api_key_alert.as_deref()) {
-        let custom_message = params.message.clone();
-        if let Err(e) = send_notification(&config, custom_message.as_deref()).await {
+        // Use the custom message if provided, otherwise use a default message
+        let message_to_send = params.message.as_deref()
+            .unwrap_or("Default private alert message");
+
+        // Send the notification with the determined message
+        if let Err(e) = send_notification(&config, Some(message_to_send)).await {
             println!("Error sending notification: {}", e);
             return HttpResponse::InternalServerError().body("Failed to send notification");
         }
