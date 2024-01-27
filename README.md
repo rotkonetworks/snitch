@@ -12,22 +12,5 @@ cp config.toml.sample -> config.toml
 docker compose up -d
 ```
 
-## Prometheus Watchdog
-Setup prometheus Watchdog to send alerts to https://rpc.rotko.net:7000/watchdog
-```yaml
-global:
-
-route:
-  routes:
-    - match:
-        alertname: Watchdog
-      receiver: 'watchdog_receiver'
-
-receivers:
-- name: 'watchdog_receiver'
-  webhook_configs:
-  - url: 'https://rpc.rotko.net:7000/watchdog'
-    http_config:
-      custom_headers:
-        X-Api-Key: 'your_api_key_here'
-```
+## Prometheus
+See alertmanager.yml for example configuration.

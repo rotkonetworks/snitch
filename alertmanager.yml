@@ -1,0 +1,36 @@
+global:
+  # Global configurations
+
+route:
+  group_by: ['alertname']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 15m
+
+  receiver: 'dummy'  # Default receiver for unhandled alerts
+  routes:
+    - match:
+        alertname: 'Watchdog'
+      receiver: 'watchdog'
+    - match:
+        severity: 'critical'
+      receiver: 'pushover'
+    - match:
+        severity: 'warning'
+      receiver: 'pushover'
+
+receivers:
+- name: 'dummy'
+
+- name: 'pushover'
+  pushover_configs:
+    - token: 'kdspokfdsopfksdp'
+      user_key: 'sdkzfopdskfdspofdksop'
+
+- name: 'watchdog'
+  webhook_configs:
+  - url: 'https://rpc.rotko.net/watchdog'
+    http_config:
+      authorization:
+        type: 'Bearer'
+        credentials: '4ad3ef73-2f55-4817-9fbe-056f95a54f7a'

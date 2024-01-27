@@ -42,44 +42,45 @@ struct AlertParams {
     message: Option<String>,
 }
 
-async fn private_alert_handler(
+fn is_authorized(req: &HttpRequest, expected_api_key: Option<&str>) -> bool {
+    match expected_api_key {
+        Some(api_key) if !api_key.is_empty() => {
+            req.headers()
+               .get("Authorization")
+               .and_then(|header_value| header_value.to_str().ok())
+               .map(|token| token == format!("Bearer {}", api_key))
+               .unwrap_or(false)
+        },
+        _ => true, // Bypass authorization check if the API key is not set or empty
+    }
+}
+
+async fn alert_handler(
     req: HttpRequest,
     config: web::Data<Config>,
     params: web::Query<AlertParams>,
 ) -> impl Responder {
-    match req.headers().get("x-api-key") {
-        Some(header_value) if config.api_key_alert.as_deref() == Some(header_value.to_str().unwrap_or("")) => {
-            let custom_message = params.message.clone();
-            if let Err(e) = send_notification(&config, custom_message.as_deref()).await {
-                println!("Error sending notification: {}", e);
-                return HttpResponse::InternalServerError().body("Failed to send notification");
-            }
-            HttpResponse::Ok().body("Private alert received and notification sent.")
-        },
-        _ => HttpResponse::Unauthorized().body("Invalid or missing API key."),
+    if is_authorized(&req, config.api_key_alert.as_deref()) {
+        let custom_message = params.message.clone();
+        if let Err(e) = send_notification(&config, custom_message.as_deref()).await {
+            println!("Error sending notification: {}", e);
+            return HttpResponse::InternalServerError().body("Failed to send notification");
+        }
+        HttpResponse::Ok().body("Private alert received and notification sent.")
+    } else {
+        HttpResponse::Unauthorized().body("Invalid or missing Authorization header.")
     }
 }
 
-// Handler for Prometheus alerts (both POST and GET)
-async fn alert_handler(data: web::Data<AppState>, req: HttpRequest, config: web::Data<Config>) -> impl Responder {
-    if config.api_key_watchdog.as_ref().map_or(true, |key| key.is_empty()) {
+async fn watchdog_handler(data: web::Data<AppState>, req: HttpRequest, config: web::Data<Config>) -> impl Responder {
+    if is_authorized(&req, config.api_key_watchdog.as_deref()) {
         let mut last_alert = data.last_alert_time.lock().unwrap();
         let current_time = Local::now();
-        println!("Heartbeat received at {}", current_time.format("%Y-%m-%d %H:%M:%S"));
+        println!("Watchdog heartbeat received at {}", current_time.format("%Y-%m-%d %H:%M:%S"));
         *last_alert = Instant::now();
-        HttpResponse::Ok().body("Alert received.")
+        HttpResponse::Ok().body("Watchdog alert received.")
     } else {
-        match req.headers().get("x-api-key") {
-            Some(header_value) if Some(header_value.to_str().unwrap_or("")) == config.api_key_watchdog.as_deref() => {
-                // Correct API key; proceed with the handler logic
-                let mut last_alert = data.last_alert_time.lock().unwrap();
-                let current_time = Local::now();
-                println!("Heartbeat received at {}", current_time.format("%Y-%m-%d %H:%M:%S"));
-                *last_alert = Instant::now();
-                HttpResponse::Ok().body("Alert received.")
-            },
-            _ => HttpResponse::Unauthorized().body("Invalid or missing API key."),
-        }
+        HttpResponse::Unauthorized().body("Invalid or missing Authorization header.")
     }
 }
 
@@ -175,10 +176,9 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(app_data.clone()) // Shared state
             .app_data(web::Data::new(config.clone())) // Configuration
-            .route("/watchdog", web::post().to(alert_handler))
-            .route("/watchdog", web::get().to(alert_handler))
-            .route("/alert", web::post().to(private_alert_handler))
-            .route("/alert", web::get().to(private_alert_handler))
+            .route("/watchdog", web::post().to(watchdog_handler))
+            .route("/alert", web::post().to(alert_handler))
+            .route("/alert", web::get().to(alert_handler))
     })
     .bind(format!("0.0.0.0:{}", server_port))?
     .workers(1)
