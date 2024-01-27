@@ -47,12 +47,12 @@ async fn alert_handler(
     params: web::Query<AlertParams>,
 ) -> HttpResponse {
     if !is_authorized(&req, &config.api_key_alert) {
-        return HttpResponse::Unauthorized().finish();
+        return HttpResponse::Unauthorized().body("0xfailure");
     }
     let message = params.message.as_deref().or_else(|| config.pushover_message.as_deref()).unwrap_or("Default message");
     match send_notification(&config, message).await {
-        Ok(_) => HttpResponse::Ok().finish(),
-        Err(_) => HttpResponse::InternalServerError().finish()
+        Ok(_) => HttpResponse::Ok().body("msg delivered succesfully"),
+        Err(_) => HttpResponse::InternalServerError().body("err")
     }
 }
 
@@ -97,6 +97,7 @@ async fn send_notification(config: &Config, message: &str) -> Result<(), Box<dyn
 async fn check_alerts(config: Config, data: web::Data<AppState>) {
     let alert_interval = Duration::from_secs(config.alert_check_interval_secs);
     let mut interval = time::interval(Duration::from_secs(60));
+    let message = config.pushover_message.as_deref().unwrap_or("Watchdog not firing!");
 
     loop {
         interval.tick().await;
@@ -104,7 +105,7 @@ async fn check_alerts(config: Config, data: web::Data<AppState>) {
 
         // Send notification if the full interval has passed
         if elapsed >= alert_interval {
-            if let Err(e) = send_notification(&config, "Alert interval exceeded").await {
+            if let Err(e) = send_notification(&config, &message).await {
                 eprintln!("Error sending notification: {}", e);
             }
 
