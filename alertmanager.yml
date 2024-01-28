@@ -1,8 +1,8 @@
 global:
-  # Global configurations
+  # Global configurations...
 
 route:
-  receiver: 'dummy'  # Default receiver for unhandled alerts
+  receiver: 'default-receiver'
   routes:
     - match:
         alertname: 'Watchdog'
@@ -15,17 +15,17 @@ route:
       receiver: 'pushover'
 
 receivers:
-- name: 'dummy'
+  - name: 'default-receiver'
+    # Dummy receiver
+  - name: 'pushover'
+    pushover_configs:
+      - token: 'app_token_here'
+        user_key: 'user_key_here'
 
-- name: 'pushover'
-  pushover_configs:
-    - token: 'kdspokfdsopfksdp'
-      user_key: 'sdkzfopdskfdspofdksop'
-
-- name: 'watchdog'
-  webhook_configs:
-  - url: 'https://rpc.rotko.net/watchdog'
-    http_config:
-      authorization:
-        type: 'Bearer'
-        credentials: '4ad3ef73-2f55-4817-9fbe-056f95a54f7a'
+  - name: 'watchdog'
+    webhook_configs:
+      - url: 'https://rpc.rotko.net/watchdog'
+        http_config:
+          authorization:
+            type: Bearer
+            credentials: '4ad3ef73-2f55-4817-9fbe-056f95a54f7a'
