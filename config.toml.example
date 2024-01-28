@@ -5,6 +5,6 @@ pushover_user = "user_token_here"
 pushover_message = "ALERT: Prometheus not running!"
 pushover_priority = "1" # 0, 1 supported
 pushover_sound = "siren" # optional
-alert_check_interval_secs = 1800 # 30 minutes
+alert_check_interval_secs = 300 # 5 minutes
 api_key_watchdog = "4ad3ef73-2f55-4817-9fbe-056f95a54f7a" # dummy key
 api_key_alert = "b0eafdac-a110-40ef-8c1e-78a33852efb1" # dummy key

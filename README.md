@@ -38,7 +38,9 @@ Here's how to set up Snitch for your monitoring needs.
 3. **Deployment with Docker**
    Deploy Snitch using Docker Compose.
    ```bash
+   docker compose build
    docker compose up -d
+   # or alternatively use deploy.sh script
    ```
 
 ## Integration with Prometheus
