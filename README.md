@@ -49,6 +49,19 @@ Refer to the `alertmanager.yml` in the repository for guidance on integrating
 Snitch with Prometheus. This configuration assists in setting up alert rules
 and establishing a connection with Snitch.
 
+Default alertmanager.yml values and snitch configs match following Watchdog rule(2m / none):
+```yaml
+  rules:
+  - alert: Watchdog
+    expr: vector(1)
+    for: 2m
+    labels:
+      severity: none
+    annotations:
+      summary: "Constant watchdog alert for monitoring the alerting pipeline."
+      description: "This alert is always firing to ensure that the alerting pipeline is functional."
+```
+
 ## Usage
 
 - **/watchdog Endpoint:** This endpoint serves as a dead man's switch to confirm
