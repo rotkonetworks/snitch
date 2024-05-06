@@ -1,9 +1,15 @@
 use serde::Deserialize;
 use serde::Serialize;
 
-/// Parameters for alert messages.
+// For JSON body
 #[derive(Deserialize)]
-pub struct AlertParams {
+pub struct JsonAlertParams {
+    pub message: Option<String>,
+}
+
+// For query parameters
+#[derive(Deserialize)]
+pub struct QueryAlertParams {
     pub message: Option<String>,
 }
 

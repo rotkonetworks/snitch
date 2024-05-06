@@ -36,7 +36,7 @@ async fn main() -> std::io::Result<()> {
         services::watchdog_service::monitor_watchdog(app_data_for_watchdog).await;
     });
 
-    println!("Server is running on http://127.0.0.1:{}/api/v1/", config.server_port);
+    println!("Server is running on http://127.0.0.1:{}/api/v1/alert", config.server_port);
     // Start the HTTP server
     HttpServer::new(move || {
         App::new()
