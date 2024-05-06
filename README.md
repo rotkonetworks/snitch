@@ -23,16 +23,19 @@ users with valid API keys.
 │   ├── services/
 │   │   ├── mod.rs          # Services module for business logic layer
 │   │   ├── alert_service.rs# Business logic for alerting features
-│   │   └── data_service.rs # Business logic for data handling
+│   │   ├── watchdog_service.rs# Business logic for alerting features
+│   │   └── db_services.rs # Business logic for data handling
 │   ├── db/
 │   │   ├── mod.rs          # DB module for database interactions
 │   │   └── conn.rs         # Database connection setup
+│   │   └── redis.rs        # Stateless cache connection setup
 │   ├── utils/
 │   │   ├── mod.rs          # Utility functions and helpers
 │   │   └── auth.rs         # Authentication utility functions
 │   └── models/
 │       ├── mod.rs          # Models for DB and domain entities
-│       └── endpoint.rs     # Endpoint specific models
+│       ├── alert_log.rs    # Endpoint specific models
+│       └── app_state.rs    # AppState specific models
 │
 ├── tests/                  # Integration and unit tests
 │   ├── api_tests.rs
@@ -40,8 +43,7 @@ users with valid API keys.
 │
 ├── Cargo.toml              # Rust project manifest
 ├── Cargo.lock              # Automatically generated lock file
-└── config/
-    └── Default.toml        # Configuration files`
+└── config.toml.sample      # Sample configuration file
 ```
 
 ## Features
@@ -108,13 +110,6 @@ the ongoing operation of your monitoring setup. It's crucial for ensuring that
 your monitoring system is active and functioning correctly.
 - **/alert Endpoint:** Ideal for situations where immediate, manual intervention
 is needed. This endpoint allows authorized users to send urgent alerts.
-
-## SSL Integration with HAProxy
-
-For secure communication, it's recommended to configure HAProxy/nginx with SSL
-to handle HTTPS traffic for the `/watchdog` and `/alert` endpoints. This ensures
-encrypted data transmission, enhancing the security of your monitoring system.
-More details in the example provided in our repository for basic SSL setup.
 
 ## Contributions
 
