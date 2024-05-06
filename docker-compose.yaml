@@ -1,7 +1,30 @@
-version: '3'
 services:
   snitch:
     build: .
     ports:
       - "7000:7000"
+    depends_on:
+      - redis
+      - db
+    environment:
+      - REDIS_URI=redis://redis:6379
+      - POSTGRES_URI=postgres://snitch:Xei4oiz7ziQuohYe@db:5432/snitch
+      - RUST_LOG=debug
     restart: always
+  redis:
+    image: "redis:alpine"
+    ports:
+      - "16379:6379"
+  db:
+    image: "postgres:alpine"
+    ports:
+      - "15432:5432"
+    environment:
+      - POSTGRES_DB=snitch
+      - POSTGRES_USER=snitch
+      - POSTGRES_PASSWORD=Xei4oiz7ziQuohYe
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

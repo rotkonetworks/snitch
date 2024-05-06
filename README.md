@@ -5,6 +5,45 @@ of Prometheus Watchdog by integrating Pushover notifications. It offers
 a unique functionality of triggering notifications through API calls for
 users with valid API keys.
 
+
+```
+``snitch/
+│
+├── src/
+│   ├── main.rs             # Entry point, setup of HTTP server, middleware
+│   ├── settings.rs         # Configuration settings, struct definitions for config
+│   ├── api/
+│   │   ├── mod.rs          # API mod to hold all version modules
+│   │   ├── v1/             # Version 1 of the API
+│   │   │   ├── mod.rs      # Declare v1 API module and sub-modules
+│   │   │   ├── handlers.rs # Request handlers specific to v1
+│   │   │   ├── models.rs   # Data models and business logic for v1
+│   │   │   └── routes.rs   # Route declarations for v1
+│   │   └── v2/             # Future version 2 of the API
+│   ├── services/
+│   │   ├── mod.rs          # Services module for business logic layer
+│   │   ├── alert_service.rs# Business logic for alerting features
+│   │   └── data_service.rs # Business logic for data handling
+│   ├── db/
+│   │   ├── mod.rs          # DB module for database interactions
+│   │   └── conn.rs         # Database connection setup
+│   ├── utils/
+│   │   ├── mod.rs          # Utility functions and helpers
+│   │   └── auth.rs         # Authentication utility functions
+│   └── models/
+│       ├── mod.rs          # Models for DB and domain entities
+│       └── endpoint.rs     # Endpoint specific models
+│
+├── tests/                  # Integration and unit tests
+│   ├── api_tests.rs
+│   └── service_tests.rs
+│
+├── Cargo.toml              # Rust project manifest
+├── Cargo.lock              # Automatically generated lock file
+└── config/
+    └── Default.toml        # Configuration files`
+```
+
 ## Features
 - Seamless integration with Prometheus Watchdog.
 - Pushover notifications for efficient alert dissemination.

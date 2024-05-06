@@ -8,3 +8,5 @@ pushover_sound = "siren" # optional
 alert_check_interval_secs = 300 # 5 minutes
 api_key_watchdog = "4ad3ef73-2f55-4817-9fbe-056f95a54f7a" # dummy key
 api_key_alert = "b0eafdac-a110-40ef-8c1e-78a33852efb1" # dummy key
+postgres_uri = "postgres://snitch:Xei4oiz7ziQuohYe@db:5432/snitch"
+redis_uri = "redis://redis:6379"
