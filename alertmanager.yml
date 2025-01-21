@@ -1,47 +1,180 @@
 global:
-  # Global configurations...
+ resolve_timeout: 5m
+
+time_intervals:
+ - name: night-shift
+   time_intervals:
+     - times:
+         - start_time: '00:00'
+           end_time: '08:00'
+       weekdays:
+         - monday
+         - tuesday
+         - wednesday
+         - thursday
+         - friday
+         - saturday
+         - sunday
+
+ - name: day-shift
+   time_intervals:
+     - times:
+         - start_time: '08:00'
+           end_time: '16:00'
+       weekdays:
+         - monday
+         - tuesday
+         - wednesday
+         - thursday
+         - friday
+         - saturday
+         - sunday
+
+ - name: evening-shift
+   time_intervals:
+     - times:
+         - start_time: '16:00'
+           end_time: '24:00'
+       weekdays:
+         - monday
+         - tuesday
+         - wednesday
+         - thursday
+         - friday
+         - saturday
+         - sunday
 
 route:
-  receiver: 'default-receiver'
-  group_by: ['alertname', 'severity']
-  group_wait: 30s
-  group_interval: 1m
-  repeat_interval: 10m
+ receiver: default-receiver
+ group_by: [alertname, severity]
+ group_wait: 30s
+ group_interval: 5m
+ repeat_interval: 10m
 
-  routes:
-    - match:
-        alertname: 'Watchdog'
-      receiver: 'watchdog'
-      group_wait: 15s
-      group_interval: 30s
-      repeat_interval: 1m
+ routes:
+   - match:
+       alertname: Watchdog
+     receiver: watchdog
+     group_interval: 30s
+     repeat_interval: 1m
 
-    - match:
-        severity: 'none'
-      receiver: 'watchdog'
-      repeat_interval: 1m
+   - match:
+       severity: none
+     receiver: watchdog
+     group_interval: 30s
+     repeat_interval: 1m
 
-    - match:
-        severity: 'critical'
-      receiver: 'pushover'
+   - match:
+       severity: critical
+     routes:
+       - receiver: walt
+         active_time_intervals: [night-shift]
+         continue: true
+         group_interval: 5m
+         repeat_interval: 15m
+         routes:
+           - match:
+               alertstate: firing
+             receiver: tommi-backup
+             group_interval: 15m
+             repeat_interval: 30m
 
-    - match:
-        severity: 'warning'
-      receiver: 'pushover'
+       - receiver: al
+         active_time_intervals: [day-shift]
+         continue: true
+         group_interval: 5m
+         repeat_interval: 15m
+         routes:
+           - match:
+               alertstate: firing
+             receiver: tommi-backup
+             group_interval: 15m
+             repeat_interval: 30m
+
+       - receiver: yassine
+         active_time_intervals: [evening-shift]
+         continue: true
+         group_interval: 5m
+         repeat_interval: 15m
+         routes:
+           - match:
+               alertstate: firing
+             receiver: tommi-backup
+             group_interval: 15m
+             repeat_interval: 30m
+
+   - match:
+       severity: warning
+     routes:
+       - receiver: walt
+         active_time_intervals: [night-shift]
+         continue: true
+         group_interval: 10m
+         repeat_interval: 20m
+         routes:
+           - match:
+               alertstate: firing
+             receiver: tommi-backup
+             group_interval: 30m
+             repeat_interval: 45m
+
+       - receiver: al
+         active_time_intervals: [day-shift]
+         continue: true
+         group_interval: 10m
+         repeat_interval: 20m
+         routes:
+           - match:
+               alertstate: firing
+             receiver: tommi-backup
+             group_interval: 30m
+             repeat_interval: 45m
+
+       - receiver: yassine
+         active_time_intervals: [evening-shift]
+         continue: true
+         group_interval: 10m
+         repeat_interval: 20m
+         routes:
+           - match:
+               alertstate: firing
+             receiver: tommi-backup
+             group_interval: 30m
+             repeat_interval: 45m
 
 receivers:
-  - name: 'default-receiver'
+ - name: default-receiver
 
-  - name: 'pushover'
-    pushover_configs:
-      - token: 'app_token_here'
-        user_key: 'user_key_here'
+ - name: pushover
+   pushover_configs:
+     - token: 'app_token_here'
+       user_key: 'user_key_here'
 
-  - name: 'watchdog'
-    webhook_configs:
-      - url: 'https://rpc.rotko.net/watchdog'
-        send_resolved: true
-        http_config:
-          authorization:
-            type: Bearer
-            credentials: '4ad3ef73-2f55-4817-9fbe-056f95a54f7a'
+ - name: watchdog
+   webhook_configs:
+     - url: https://status.rotko.net/watchdog
+       send_resolved: true
+       http_config:
+         authorization:
+           type: Bearer
+           credentials: 4308c0b9-1ebc-4765-85a4-999d2e187b21
+
+ - name: walt
+   webhook_configs:
+     - url: https://ntfy.rotko.net/walt
+       send_resolved: true
+
+ - name: al
+   webhook_configs:
+     - url: https://ntfy.rotko.net/al
+       send_resolved: true
+
+ - name: yassine
+   webhook_configs:
+     - url: https://ntfy.rotko.net/yassine
+       send_resolved: true
+
+ - name: tommi-backup
+   webhook_configs:
+     - url: https://ntfy.rotko.net/tommi
+       send_resolved: true
